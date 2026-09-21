@@ -1,6 +1,6 @@
 from celery import Celery
 from celery.schedules import crontab
-
+import ssl
 from app.core.config import settings
 
 celery_app = Celery(
@@ -16,7 +16,9 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="Asia/Kolkata",
     enable_utc=True,
-    broker_connection_retry_on_startup=True,  # silences the warning, sets explicit future-proof behavior
+    broker_connection_retry_on_startup=True,
+    redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+    broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
 )
 
 # Scheduled ("periodic") tasks — Celery's cron-like scheduler
