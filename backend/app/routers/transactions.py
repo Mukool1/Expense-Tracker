@@ -1,9 +1,10 @@
 from datetime import date
 from typing import cast
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
+from app.models.category import Category
+from app.ml.predict_anomaly import check_anomaly
 from app.database.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
@@ -42,6 +43,17 @@ def create_transaction(tx_in: TransactionCreate, db: Session = Depends(get_db), 
     db.add(tx)
     db.commit()
     db.refresh(tx)
+
+    category = db.query(Category).filter(Category.id == tx.category_id).first()
+    try:
+        anomaly_result = check_anomaly(float(tx.amount), category.name, tx.transaction_date)
+        tx.is_anomaly = anomaly_result["is_anomaly"]
+        tx.anomaly_score = anomaly_result["anomaly_score"]
+        db.commit()
+        db.refresh(tx)
+    except FileNotFoundError:
+        pass # anomaly model hasn't been trained yet — fine, just skip flagging for now
+
     return tx
 
 

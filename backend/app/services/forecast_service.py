@@ -22,6 +22,8 @@ def _monthly_total(db: Session, user_id: int, category_id: int, month: date) -> 
 
 
 def _population_average_for_category(db: Session, category_id: int, exclude_user_id: int) -> float | None:
+    from app.models.category import Category
+    from app.models.user import User
 
     this_category = db.query(Category).filter(Category.id == category_id).first()
     if not this_category:
@@ -37,6 +39,7 @@ def _population_average_for_category(db: Session, category_id: int, exclude_user
         func.lower(Category.name) == this_category.name.lower(),
         Transaction.user_id != exclude_user_id,
         User.email != "demo@example.com",
+        Transaction.is_anomaly.isnot(True),  # exclude known outliers from the "typical" baseline
     ).group_by(Transaction.user_id, "month").all()
 
     if not rows:

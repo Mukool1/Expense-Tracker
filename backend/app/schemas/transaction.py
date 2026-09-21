@@ -18,7 +18,9 @@ class TransactionOut(BaseModel):
     transaction_date: date
     source: str
     created_at: datetime
-    category: CategoryOut  # nested — comes from the relationship, not a raw category_id
+    category: CategoryOut
+    is_anomaly: bool | None = None
+    anomaly_score: float | None = None
 
     class Config:
         from_attributes = True

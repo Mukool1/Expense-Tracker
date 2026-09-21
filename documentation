@@ -1,0 +1,383 @@
+# Expense Tracker Project Documentation
+
+This project is a full-stack expense management application built to help users track spending, categorize transactions, scan receipts, and view forecasts. It combines a React frontend with a FastAPI backend, a PostgreSQL database, Redis/Celery background jobs, and some ML-based features for expense understanding.
+
+---
+
+## 1. Project overview
+
+The application has three main concerns:
+
+1. Frontend experience
+   - A modern dashboard and transaction management UI
+   - Login, registration, category management, analytics, and forecasting screens
+   - Dark mode support
+
+2. Backend API
+   - Authentication and authorization
+   - Category and transaction CRUD logic
+   - Receipt OCR and parsing
+   - Forecast generation and ML workflows
+
+3. Data and services layer
+   - PostgreSQL for relational data storage
+   - Redis for Celery task queue coordination
+   - Cloudinary for image storage / receipts
+   - ML models and prediction pipeline for categorization and anomaly detection
+
+In short, the frontend is the user interface, the backend is the application brain, and the database plus worker services handle persistence and processing.
+
+---
+
+## 2. Root project structure
+
+The workspace is split into two major folders:
+
+- backend/
+  - Python-based API and background workers
+- frontend/
+  - React/Vite client application
+
+### Backend structure
+
+backend/
+
+- app/
+  - main.py
+    - Creates the FastAPI app and includes the routers
+  - core/
+    - config.py: environment and configuration values
+    - deps.py: dependency injection for database and auth
+    - security.py: token generation / password hashing logic
+  - database/
+    - database.py: database engine and session setup
+  - models/
+    - SQLAlchemy models for users, transactions, categories, receipts, forecasts
+  - routers/
+    - auth.py: login/register endpoints
+    - categories.py: category CRUD
+    - transactions.py: spending entries
+    - receipts.py: OCR receipt upload and processing routes
+    - forecasts.py: forecast endpoints
+  - schemas/
+    - Pydantic request/response validation classes
+  - services/
+    - forecast_service.py: business logic around forecasting
+  - ml/
+    - category_encoding.py, predict.py, predict_anomaly.py, train.py, train_anomaly.py
+    - Generates and applies ML logic for expense categorization and anomaly detection
+  - tasks/
+    - celery_app.py: Celery app configuration
+    - ml_tasks.py: async ML/OCR-related tasks
+- alembic/
+  - Database migration setup and versioned schema changes
+- requirements.txt
+  - Python dependencies
+- alembic.ini
+  - Alembic configuration
+
+### Frontend structure
+
+frontend/
+
+- index.html
+  - App entry page
+- package.json
+  - Scripts and frontend dependencies
+- vite.config.js
+  - Vite configuration
+- src/
+  - App.jsx
+    - Main routing and app root
+  - main.jsx
+    - React bootstrap entry point
+  - api/
+    - client.js
+    - Axios HTTP client used for API calls
+  - components/
+    - Reusable UI blocks such as AppShell, Card, CategoryBadge, Theme toggle, charts, nav, and forms
+  - pages/
+    - Landing, Login, Register, Dashboard, Transactions, AddTransaction, Categories, Forecasts
+  - store/
+    - Zustand state stores for auth, categories, transactions, forecasts, theme, toast
+  - lib/
+    - categoryStyle.js, format.js for display helpers and category logic
+  - demo/
+    - mock data and adapter used for demos or placeholder content
+
+---
+
+## 3. Tech stack used
+
+### Frontend technologies
+
+- React 19
+  - UI library for building components and page screens
+- Vite
+  - Lightning-fast frontend build and dev server
+- React Router
+  - Page navigation and protected routes
+- Zustand
+  - Global application state store for auth, category data, transactions, forecasts, theme
+- Axios
+  - HTTP requests to the FastAPI backend
+- Tailwind CSS
+  - Utility classes for styling and dark mode
+- Motion (motion/react)
+  - Entrance and animation effects
+- Recharts
+  - Charts and analytics visuals
+- Lucide React
+  - Icons for navigation, actions, and dashboard components
+
+### Backend technologies
+
+- FastAPI
+  - Core API framework with async support and automatic validation
+- SQLAlchemy
+  - ORM for database models and queries
+- Pydantic
+  - Data validation and serialization schemas
+- PostgreSQL
+  - Relational data storage for users, categories, transactions, and forecasts
+- Redis
+  - Queue and cache support for background jobs
+- Celery
+  - Long-running tasks like receipt processing and ML work
+- Cloudinary
+  - Image asset storage and receipt media management
+- EasyOCR
+  - OCR extraction for receipt text from uploaded images
+- scikit-learn, pandas, joblib
+  - Machine learning features such as category modeling and anomaly detection
+
+### Dev and environment tooling
+
+- Python venv / virtual environment for backend
+- npm for frontend package management
+- Alembic for schema migrations
+- environment variables in backend/.env or settings config
+
+---
+
+## 4. How the app works, thread by thread
+
+### A. Authentication and app boot
+
+The frontend loads the app and the user can access protected routes only when authenticated.
+
+- The root app in frontend/src/App.jsx configures routing
+- The auth store saves JWT/session state
+- API requests include auth tokens through the Axios client
+- ProtectedRoute ensures only logged-in users can visit private pages
+
+On the backend:
+
+- app/main.py builds FastAPI
+- auth router handles register/login
+- security.py provides JWT token generation and password hashing
+- database models define user records and access relationships
+
+So a login flow looks like this:
+
+1. User enters email and password in the frontend
+2. Frontend calls /api/auth/login
+3. FastAPI validates credentials
+4. JWT is created and returned
+5. Frontend stores the token
+6. Later requests include that token for protected endpoints
+
+### B. Categories and transactions
+
+Each category and transaction is stored in the database.
+
+- Category records contain names and metadata
+- Transaction records store merchant, amount, date, category link, and user link
+- The frontend loads categories from the backend via the category store
+- Users choose a category when creating a new expense
+
+The add transaction flow:
+
+1. User opens AddTransaction page
+2. Form collects merchant, amount, category, and date
+3. Frontend posts to /api/transactions/
+4. Backend validates data with Pydantic schemas
+5. Transaction is saved to PostgreSQL
+6. User navigates back to Transactions dashboard
+
+This is what makes the whole tracker work: every spent amount is attached to a person and category, so charts and reports can summarize it later.
+
+### C. Dashboard and analytics
+
+The dashboard is the reporting surface.
+
+- Transaction data is fetched from the API
+- Category badge logic assigns colors/icons based on category names
+- Recharts builds donut, bar, and line style analytics
+- The UI groups spending by category, recent transactions, and trending summaries
+
+This is not just display logic; it is the visible understanding layer of the app. The app reads the raw transactions, groups them, computes totals, and then renders visual summaries.
+
+### D. Receipt scanning flow
+
+This is one of the more advanced parts of the project.
+
+Flow:
+
+1. User uploads an image from the AddTransaction page
+2. Frontend sends it to /api/receipts/scan using multipart form data
+3. Backend accepts the image and starts a background Celery job
+4. The job uses OCR (EasyOCR) to extract the receipt text
+5. Parsing logic extracts merchant name, total amount, and date
+6. The task stores or returns the parsed result
+7. Frontend polls /api/receipts/scan/{task_id} until status is done
+8. The parsed values are prefilled into the transaction form
+
+This makes receipt entry feel very smart: the user does not need to type everything manually.
+
+### E. Forecasting and ML
+
+The backend includes ML modules under app/ml and forecasting endpoints.
+
+- Some logic trains models for category predictions and anomaly detection
+- The app can infer patterns from previous user spending
+- Forecasts estimate likely future spend based on historical behavior
+- The prediction models may be used for category matching or anomaly detection on transactions
+
+The flow is roughly:
+
+1. Historical transaction data exists in the database
+2. Training scripts build or reload ML model artifacts
+3. The prediction or anomaly logic reads recent data
+4. Forecast endpoints return predicted or flagged results
+5. The frontend displays those estimates in the dashboard/forecast pages
+
+This is how the app goes beyond simple bookkeeping and becomes smarter than a raw ledger.
+
+### F. Background jobs and queue processing
+
+Redis + Celery is used for work that should not block the user request.
+
+Examples:
+
+- OCR receipt processing
+- ML batch jobs
+- Model training or refresh workflows
+- Forecast generation tasks
+
+This keeps the app responsive. Instead of making the API wait for heavy processing, the request creates a task and returns a task ID.
+
+---
+
+## 5. Data model in simple terms
+
+The database is relational and tracks real-world relationships.
+
+- User
+  - identity and authentication information
+- Category
+  - expense label such as Food, Travel, Groceries, Health
+- Transaction
+  - merchant, date, amount, category, user
+- Receipt
+  - uploaded image metadata and OCR/parsed output
+- Forecast / ML output
+  - predicted spending or anomaly summary
+
+The important relationship is:
+
+User -> many Transactions
+Category -> many Transactions
+Transaction -> belongs to one user and one category
+
+That structure allows reporting by user, category, and time period.
+
+---
+
+## 6. Frontend state pattern
+
+The frontend uses Zustand stores instead of a massive app-wide context tree.
+
+Examples:
+
+- authStore.js: stores login state and token info
+- categoryStore.js: loads and manages categories
+- transactionStore.js: list and create transactions
+- forecastStore.js: stores forecast data
+- themeStore.js: handles dark mode state
+- toastStore.js: common user notifications
+
+This keeps the UI modular: screens request only what they need, and the stores control the data lifecycle.
+
+---
+
+## 7. Dark mode behavior
+
+Dark mode is implemented with Tailwind’s dark variants.
+
+- The app checks a theme store state like isDark
+- Components use classes such as dark:bg-white/5, dark:text-white, dark:border-white/10
+- The selected theme toggles the color system without rewriting the entire UI
+
+This is why light/dark styling is consistent across pages with minimal custom CSS.
+
+---
+
+## 8. How the whole project fits together
+
+The simplest “thin-thread” summary is:
+
+User interacts with frontend -> frontend sends request to API -> backend validates and reads/writes database -> background tasks process heavy work -> frontend displays analytics and results
+
+Example end-to-end flow for a new transaction:
+
+1. User goes to Add Transaction
+2. Selects category and enters amount
+3. Frontend sends payload to backend
+4. Backend validates request
+5. SQLAlchemy saves record to PostgreSQL
+6. Dashboard fetches updated list
+7. Charts recalculate totals
+8. User sees updated spending summary instantly
+
+For a receipt upload:
+
+1. User uploads image
+2. Frontend sends image to receipt endpoint
+3. Celery worker processes OCR and parsing
+4. API returns status and parsed fields
+5. Frontend fills form automatically
+6. User confirms and saves the transaction
+
+---
+
+## 9. Mental model for understanding the codebase
+
+If you need to debug or extend this project, the easiest way is to follow the data flow:
+
+- Frontend page -> store -> API client -> backend router -> service/model -> database
+- For OCR or ML tasks: frontend -> receipt route -> Celery task -> OCR/ML code -> result back to frontend
+
+When reading code, always ask:
+
+- What data is coming in?
+- Where is it validated?
+- Where is it persisted?
+- How does the UI update after a response?
+
+That mental model will help you understand all modules quickly.
+
+---
+
+## 10. Summary
+
+This project is a modern expense tracker combining:
+
+- React + Vite frontend for the user interface
+- FastAPI + SQLAlchemy backend for business logic and API
+- PostgreSQL for reliable storage
+- Redis + Celery for background processing
+- OCR + ML for receipt intelligence and forecasting
+- Tailwind for responsive, dark-mode-friendly styling
+
+The design is intentionally modular. Each folder has a clear responsibility, and together the frontend, backend, database, and ML pipeline form a complete spending intelligence app.

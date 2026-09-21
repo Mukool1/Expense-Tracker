@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
+import { setDemoMode, isDemoMode } from "../demo/demoAdapter";
+import { demoUser } from "../demo/mockData";
 
 export const useAuthStore = create(
   persist(
@@ -32,7 +34,17 @@ export const useAuthStore = create(
         // registering doesn't log the user in automatically — call login() after, on the page
       },
 
-      logout: () => set({ token: null, user: null }),
+      // instant demo session — no network call; flips on the demo-mode flag
+      // so the API client serves the local dataset from then on
+      loginDemo: () => {
+        setDemoMode(true);
+        set({ token: "demo-jwt-token", user: { ...demoUser } });
+      },
+
+      logout: () => {
+        setDemoMode(false);
+        set({ token: null, user: null });
+      },
 
       isAuthenticated: () => !!get().token,
     }),
@@ -41,3 +53,13 @@ export const useAuthStore = create(
     },
   ),
 );
+
+// ---------------------------------------------------------------------------
+// Demo auto-auth, synchronously at module load (before first render).
+// Doing this in a useEffect is too late: ProtectedRoute would bounce an
+// unauthenticated first paint to /login, and Login would then forward the
+// fresh demo session to /dashboard — losing the original deep link.
+// ---------------------------------------------------------------------------
+if (isDemoMode() && !useAuthStore.getState().token) {
+  useAuthStore.getState().loginDemo();
+}

@@ -15,7 +15,10 @@ export const useCategoryStore = create((set, get) => ({
       throw err;
     }
   },
-
+  deleteCategory: async (id) => {
+    await client.delete(`/categories/${id}`);
+    set({ categories: get().categories.filter((c) => c.id !== id) });
+  },
   createCategory: async (name) => {
     const res = await client.post("/categories/", { name });
     set({ categories: [...get().categories, res.data] });

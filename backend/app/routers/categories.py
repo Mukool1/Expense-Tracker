@@ -30,12 +30,22 @@ def create_category(cat_in: CategoryCreate, db: Session = Depends(get_db), curre
     return category
 
 
+from sqlalchemy.exc import IntegrityError
+
 @router.delete("/{category_id}", status_code=204)
 def delete_category(category_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
-    if cast(int, category.user_id) != cast(int, current_user.id):
+    if category.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your category")
-    db.delete(category)
-    db.commit()
+
+    try:
+        db.delete(category)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This category has transactions attached — delete or reassign them first.",
+        )
