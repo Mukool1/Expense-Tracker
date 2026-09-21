@@ -30,7 +30,12 @@ def load_transactions_df() -> pd.DataFrame:
         } for r in rows]
     finally:
         db.close()
-    return pd.DataFrame(data)
+    # NOTE: columns= is deliberate — pd.DataFrame([]) on an empty result has no
+    # columns at all, which would make build_features fail with KeyError.
+    return pd.DataFrame(
+        data,
+        columns=["amount", "category_name", "day_of_month", "month_number"],
+    )
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -44,6 +49,10 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def train():
     df = load_transactions_df()
+    if df.empty:
+        print("No transactions found — skipping anomaly training (keeping existing model).")
+        return
+
     featured = build_features(df)
     feature_cols = ["amount", "day_of_month", "month_number"] + CATEGORY_FEATURE_COLS
     X = featured[feature_cols]

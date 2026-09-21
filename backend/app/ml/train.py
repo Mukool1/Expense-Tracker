@@ -11,6 +11,9 @@ from app.models.transaction import Transaction
 
 MODEL_PATH = "app/ml/artifacts/spend_forecast_model.pkl"
 
+# Minimum usable rows after feature engineering before we bother training.
+MIN_TRAIN_ROWS = 10
+
 
 def load_monthly_spend() -> pd.DataFrame:
     """Pull every transaction and collapse it into one row per (user, category, month)."""
@@ -34,7 +37,17 @@ def load_monthly_spend() -> pd.DataFrame:
     finally:
         db.close()
 
-    df = pd.DataFrame(data)
+    # NOTE: columns= is deliberate. pd.DataFrame([]) on an empty query result
+    # creates a column-less DataFrame, and the groupby below then blows up with
+    # KeyError('user_id'). With columns= declared, an empty result stays a
+    # well-shaped empty DataFrame and everything downstream handles it.
+    df = pd.DataFrame(
+        data,
+        columns=["user_id", "category_id", "category_name", "month", "amount"],
+    )
+    if df.empty:
+        return df.rename(columns={"amount": "actual_spend"})
+
     monthly = df.groupby(["user_id", "category_id", "category_name", "month"], as_index=False)["amount"].sum()
     return monthly.rename(columns={"amount": "actual_spend"}).sort_values(["user_id", "category_id", "month"])
 
@@ -61,7 +74,17 @@ def build_features(monthly: pd.DataFrame) -> pd.DataFrame:
 
 def train():
     monthly = load_monthly_spend()
+    if monthly.empty:
+        print("No transactions found — skipping forecast training (keeping existing model).")
+        return
+
     featured = build_features(monthly)
+    if len(featured) < MIN_TRAIN_ROWS:
+        print(
+            f"Only {len(featured)} usable training rows (need {MIN_TRAIN_ROWS}) — "
+            "skipping forecast training (keeping existing model)."
+        )
+        return
 
     feature_cols = ["spend_last_month", "spend_avg_3mo", "spend_avg_6mo", "month_number"] + CATEGORY_FEATURE_COLS
     X = featured[feature_cols]
