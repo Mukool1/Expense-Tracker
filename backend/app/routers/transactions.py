@@ -14,6 +14,31 @@ from app.services.retrain import retrain_models
 
 router = APIRouter()
 
+# Anomaly detection needs a baseline to compare against. With only a handful
+# of transactions there is no "normal" yet, and scoring against the global
+# model would flag nearly everything — so we don't score until the user has
+# enough of their own history.
+MIN_TXNS_FOR_ANOMALY = 10
+
+
+def _maybe_flag_anomaly(db: Session, tx: Transaction) -> bool:
+    """Score one transaction for anomaly. Returns True if it was scored."""
+    user_tx_count = (
+        db.query(Transaction).filter(Transaction.user_id == tx.user_id).count()
+    )
+    if user_tx_count < MIN_TXNS_FOR_ANOMALY:
+        return False
+    category = db.query(Category).filter(Category.id == tx.category_id).first()
+    try:
+        result = check_anomaly(float(tx.amount), category.name, tx.transaction_date)
+    except FileNotFoundError:
+        return False  # model hasn't been trained yet — skip quietly
+    tx.is_anomaly = result["is_anomaly"]
+    tx.anomaly_score = result["anomaly_score"]
+    db.commit()
+    db.refresh(tx)
+    return True
+
 
 @router.get("/", response_model=list[TransactionOut])
 def list_transactions(
@@ -50,19 +75,41 @@ def create_transaction(
     db.commit()
     db.refresh(tx)
 
-    category = db.query(Category).filter(Category.id == tx.category_id).first()
-    try:
-        anomaly_result = check_anomaly(float(tx.amount), category.name, tx.transaction_date)
-        tx.is_anomaly = anomaly_result["is_anomaly"]
-        tx.anomaly_score = anomaly_result["anomaly_score"]
-        db.commit()
-        db.refresh(tx)
-    except FileNotFoundError:
-        pass # anomaly model hasn't been trained yet — fine, just skip flagging for now
+    _maybe_flag_anomaly(db, tx)
 
     # Retrain in the background after the response is sent (replaces celery beat).
     background_tasks.add_task(retrain_models)
     return tx
+
+
+@router.post("/recheck-anomalies")
+def recheck_anomalies(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-run anomaly detection over the current user's transactions.
+
+    Clears bogus flags for users with too little history to judge, and
+    re-scores everyone else. Useful after the minimum-history gate was added.
+    """
+    txns = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == current_user.id)
+        .order_by(Transaction.id)
+        .all()
+    )
+    cleared = rescored = 0
+    if len(txns) < MIN_TXNS_FOR_ANOMALY:
+        for tx in txns:
+            tx.is_anomaly = False
+            tx.anomaly_score = None
+            cleared += 1
+        db.commit()
+    else:
+        for tx in txns:
+            if _maybe_flag_anomaly(db, tx):
+                rescored += 1
+    return {"total": len(txns), "cleared": cleared, "rescored": rescored}
 
 
 @router.delete("/{transaction_id}", status_code=204)

@@ -149,8 +149,14 @@ function AddTransaction() {
       if (!mountedRef.current) return;
       clearTimers();
       setScanning(false);
+      const detail = err.response?.data?.detail;
       setError(
-        err.response?.data?.detail || "Could not scan the receipt. Try again.",
+        detail ||
+          (!err.response
+            ? // No response at all: server unreachable, still waking up, or
+              // the request died in transit. Name it so it's debuggable.
+              "The server didn't respond. It may be waking up — wait ~30 seconds and try again."
+            : "Could not scan the receipt. Try again."),
       );
     }
   };
