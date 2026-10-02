@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import axios from "axios";
+import client from "../api/client";
 import { setDemoMode, isDemoMode } from "../demo/demoAdapter";
 import { demoUser } from "../demo/mockData";
 
@@ -15,19 +15,15 @@ export const useAuthStore = create(
         form.append("username", email);
         form.append("password", password);
 
-        const res = await axios.post(
-          "http://localhost:8000/api/auth/login",
-          form,
-          {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          },
-        );
+        const res = await client.post("/auth/login", form, {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
 
         set({ token: res.data.access_token, user: { email } });
       },
 
       register: async (email, password) => {
-        await axios.post("http://localhost:8000/api/auth/register", {
+        await client.post("/auth/register", {
           email,
           password,
         });

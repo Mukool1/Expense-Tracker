@@ -1,0 +1,51 @@
+services:
+  # ---------------- API (FastAPI, no Celery — everything runs in-process) ------
+  - type: web
+    name: expenseai-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    # Install deps, then pre-download the EasyOCR models at BUILD time so the
+    # first real request doesn't pay the ~100MB download cost.
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      python -c "import easyocr; easyocr.Reader(['en'], gpu=False)"
+    # Run DB migrations, then start the server. Render injects $PORT.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      # Point at your Neon database (you already migrated your data there).
+      # Paste the connection string in the Render dashboard after deploy.
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      # Set to the frontend's URL after it deploys (comma-separated if many).
+      - key: FRONTEND_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+  # ---------------- Frontend (React/Vite, static CDN) --------------------------
+  - type: web
+    name: expenseai-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    # SPA fallback: every route serves index.html so React Router works on refresh.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # MUST be set to https://<your-api>.onrender.com/api BEFORE the frontend
+      # builds (Vite bakes it in). Set it in the dashboard, then redeploy.
+      - key: VITE_API_URL
+        sync: false

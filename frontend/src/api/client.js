@@ -3,7 +3,9 @@ import { useAuthStore } from "../store/authStore";
 import { isDemoMode, createDemoAdapter } from "../demo/demoAdapter";
 
 const client = axios.create({
-  baseURL: "http://localhost:8000/api",
+  // Set VITE_API_URL at build time (e.g. https://expenseai-api.onrender.com/api).
+  // Falls back to the local dev server when unset.
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
 });
 
 // runs before every request — attaches the JWT automatically if we're logged in.

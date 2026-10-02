@@ -1,6 +1,6 @@
 from datetime import date
 from typing import cast
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.category import Category
@@ -9,7 +9,8 @@ from app.database.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionCreate, TransactionOut
+from app.schemas.transaction import TransactionOut, TransactionCreate
+from app.services.retrain import retrain_models
 
 router = APIRouter()
 
@@ -38,7 +39,12 @@ def list_transactions(
 
 
 @router.post("/", response_model=TransactionOut, status_code=201)
-def create_transaction(tx_in: TransactionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_transaction(
+    tx_in: TransactionCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     tx = Transaction(user_id=current_user.id, **tx_in.model_dump())
     db.add(tx)
     db.commit()
@@ -54,11 +60,18 @@ def create_transaction(tx_in: TransactionCreate, db: Session = Depends(get_db), 
     except FileNotFoundError:
         pass # anomaly model hasn't been trained yet — fine, just skip flagging for now
 
+    # Retrain in the background after the response is sent (replaces celery beat).
+    background_tasks.add_task(retrain_models)
     return tx
 
 
 @router.delete("/{transaction_id}", status_code=204)
-def delete_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_transaction(
+    transaction_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
@@ -66,3 +79,4 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db), curre
         raise HTTPException(status_code=403, detail="Not your transaction")
     db.delete(tx)
     db.commit()
+    background_tasks.add_task(retrain_models)

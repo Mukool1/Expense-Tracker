@@ -1,7 +1,7 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
-psycopg2==2.9.9
+psycopg2-binary
 alembic==1.13.2
 pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
@@ -12,15 +12,12 @@ python-dateutil==2.9.0
 email-validator==2.2.0
 # OCR
 easyocr==1.7.2
+pillow==10.4.0
 
 # ML
 scikit-learn==1.5.2
 pandas==2.2.3
 joblib==1.4.2
-
-# Background tasks
-celery==5.4.0
-redis==5.1.1
 
 # Storage
 cloudinary==1.41.0

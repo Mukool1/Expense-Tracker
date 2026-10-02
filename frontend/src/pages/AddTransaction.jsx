@@ -25,7 +25,6 @@ import { cx, todayISO } from "../lib/format";
 
 const SCAN_STEPS = ["Uploading", "Reading text", "Extracting total"];
 const STEP_INTERVAL_MS = 1200;
-const POLL_INTERVAL_MS = 1500;
 
 const emptyForm = () => ({
   category_id: "",
@@ -64,7 +63,6 @@ function AddTransaction() {
   const [dragging, setDragging] = useState(false);
 
   const fileInputRef = useRef(null);
-  const pollTimerRef = useRef(null);
   const stepTimersRef = useRef([]);
   const mountedRef = useRef(true);
 
@@ -82,13 +80,12 @@ function AddTransaction() {
   // Tracks mount status so async scan work never touches state after unmount.
   // NOTE: the setup MUST reset the flag to true — React StrictMode (used in
   // `npm run dev`) runs the effect cleanup on the initial mount too. Without
-  // this reset the flag stays false forever and the scan polling silently
-  // never starts (the POST still succeeds, so the backend log looks fine).
+  // this reset the flag stays false forever and the scan result silently
+  // never applies (the POST still succeeds, so the backend log looks fine).
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       stepTimersRef.current.forEach((t) => clearTimeout(t));
     };
   }, []);
@@ -96,10 +93,6 @@ function AddTransaction() {
   const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const clearTimers = () => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
     stepTimersRef.current.forEach((t) => clearTimeout(t));
     stepTimersRef.current = [];
   };
@@ -136,56 +129,30 @@ function AddTransaction() {
     try {
       const payload = new FormData();
       payload.append("file", file);
+      // Synchronous scan: the server uploads, OCRs and parses in one request
+      // and returns the result directly (no task polling anymore).
       const res = await client.post("/receipts/scan", payload, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!mountedRef.current) return;
-      pollForResult(res.data.task_id);
+      clearTimers();
+      const data = res.data;
+      setScanning(false);
+      setScanResult(data);
+      setForm({
+        category_id: "",
+        amount: data.suggested_amount ?? "",
+        merchant: data.suggested_merchant ?? "",
+        transaction_date: data.suggested_date || todayISO(),
+      });
     } catch (err) {
       if (!mountedRef.current) return;
       clearTimers();
       setScanning(false);
       setError(
-        err.response?.data?.detail || "Could not start the scan. Try again.",
+        err.response?.data?.detail || "Could not scan the receipt. Try again.",
       );
     }
-  };
-
-  const pollForResult = (taskId) => {
-    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    pollTimerRef.current = setInterval(async () => {
-      try {
-        const res = await client.get(`/receipts/scan/${taskId}`);
-        if (!mountedRef.current) {
-          clearInterval(pollTimerRef.current);
-          return;
-        }
-        if (res.data.status === "done") {
-          clearTimers();
-          const data = res.data.result;
-          setScanning(false);
-          setScanResult(data);
-          setForm({
-            category_id: "",
-            amount: data.suggested_amount ?? "",
-            merchant: data.suggested_merchant ?? "",
-            transaction_date: data.suggested_date || todayISO(),
-          });
-        } else if (res.data.status === "failed") {
-          clearTimers();
-          setScanning(false);
-          setError("");
-          toast.error("Receipt processing failed. Try a clearer photo.");
-        }
-      } catch (err) {
-        if (!mountedRef.current) return;
-        clearTimers();
-        setScanning(false);
-        setError(
-          err.response?.data?.detail || "Lost connection while scanning.",
-        );
-      }
-    }, POLL_INTERVAL_MS);
   };
 
   const handleDrop = (e) => {

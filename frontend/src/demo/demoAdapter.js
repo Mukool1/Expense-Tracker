@@ -57,7 +57,6 @@ export function setDemoMode(on) {
 
 let categories = structuredClone(demoCategories);
 let transactions = structuredClone(demoTransactions);
-const scanTasks = new Map();
 let scanCounter = 0;
 
 const latency = () =>
@@ -216,27 +215,13 @@ export function createDemoAdapter() {
       return ok(config, null, 204);
     }
 
-    // ---- receipts ----
+    // ---- receipts (synchronous: result returned immediately, no polling) ----
     if (method === "post" && path === "/receipts/scan") {
-      const task_id = `demo-scan-${Date.now()}`;
-      scanTasks.set(task_id, {
-        startedAt: Date.now(),
-        idx: scanCounter++ % demoScanResults.length,
-      });
-      return ok(config, { task_id });
-    }
-    const scanMatch =
-      method === "get" ? path.match(/^\/receipts\/scan\/([^/]+)\/?$/) : null;
-    if (scanMatch) {
-      const task = scanTasks.get(scanMatch[1]);
-      if (!task) fail(config, 404, "Scan task not found.");
-      if (Date.now() - task.startedAt < 3000) {
-        return ok(config, { status: "processing" });
-      }
-      return ok(config, {
-        status: "done",
-        result: { ...demoScanResults[task.idx], suggested_date: todayISO() },
-      });
+      const result = {
+        ...demoScanResults[scanCounter++ % demoScanResults.length],
+        suggested_date: todayISO(),
+      };
+      return ok(config, result);
     }
 
     // ---- forecasts ----
