@@ -1,6 +1,5 @@
-"""Synchronous receipt scanning: Cloudinary upload -> EasyOCR -> parse.
+"""Synchronous receipt scanning: Cloudinary upload -> RapidOCR -> parse.
 
-Replaces the old Celery task (app.tasks.ml_tasks.process_receipt_ocr).
 Runs in-process so no worker/Redis is needed on deploy.
 """
 import cloudinary
@@ -10,7 +9,7 @@ from PIL import Image
 from app.core.config import settings
 from app.ocr.parser import extract_text, parse_receipt
 
-# EasyOCR gets slow and memory-hungry on huge phone photos; downscale first.
+# OCR is faster and leaner on reasonably-sized images; downscale huge photos first.
 MAX_OCR_WIDTH = 1600
 
 

@@ -10,8 +10,8 @@ bcrypt==4.0.1
 python-multipart==0.0.9
 python-dateutil==2.9.0
 email-validator==2.2.0
-# OCR
-easyocr==1.7.2
+# OCR (lightweight ONNX-based; fits Render's 512MB free tier)
+rapidocr-onnxruntime==1.4.2
 pillow==10.4.0
 
 # ML

@@ -1,19 +1,32 @@
 import re
 from datetime import datetime
-import easyocr
+from rapidocr_onnxruntime import RapidOCR
 
-_reader = easyocr.Reader(['en'], gpu=False)
+# Created lazily on first scan: keeps API startup lean (matters on 512MB hosts),
+# first scan pays ~1-2s model load, later scans reuse the engine.
+_reader = None
+
+
+def _get_reader() -> RapidOCR:
+    global _reader
+    if _reader is None:
+        _reader = RapidOCR()
+    return _reader
 
 LABEL_LINES = {"date", "bill", "bill no", "invoice", "receipt", "name", "phone",
                "quantity", "rate", "amount", "total", "no.", "no"}
 
 
 def extract_text(image_path: str) -> tuple[str, float]:
-    results = _reader.readtext(image_path)
-    if not results:
+    # RapidOCR returns (predictions, timings); each prediction is
+    # [box_points, text, confidence].
+    predictions, _ = _get_reader()(image_path)
+    if not predictions:
         return "", 0.0
-    full_text = "\n".join(r[1] for r in results)
-    avg_confidence = sum(r[2] for r in results) / len(results)
+    # Sort top-to-bottom, left-to-right so lines read in natural order.
+    predictions = sorted(predictions, key=lambda p: (p[0][0][1], p[0][0][0]))
+    full_text = "\n".join(p[1] for p in predictions)
+    avg_confidence = sum(p[2] for p in predictions) / len(predictions)
     return full_text, avg_confidence
 
 

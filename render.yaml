@@ -5,11 +5,12 @@ services:
     runtime: python
     plan: free
     rootDir: backend
-    # Install deps, then pre-download the EasyOCR models at BUILD time so the
-    # first real request doesn't pay the ~100MB download cost.
+    # Install deps, then warm up the OCR engine once so the first real
+    # request doesn't pay model-load cost. (RapidOCR models ship inside the
+    # pip wheel — no big downloads, and it sips RAM unlike EasyOCR.)
     buildCommand: >-
       pip install -r requirements.txt &&
-      python -c "import easyocr; easyocr.Reader(['en'], gpu=False)"
+      python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR()"
     # Run DB migrations, then start the server. Render injects $PORT.
     startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
