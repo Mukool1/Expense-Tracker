@@ -39,24 +39,8 @@ function App() {
             </>
           }
         />
-        <Route
-          path="/login"
-          element={
-            <>
-              <MarketingNav />
-              <Login />
-            </>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <>
-              <MarketingNav />
-              <Register />
-            </>
-          }
-        />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route
           path="/dashboard"
           element={

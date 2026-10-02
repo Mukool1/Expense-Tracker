@@ -31,36 +31,46 @@
   --animate-pulse-soft: pulse-soft 3s ease-in-out infinite;
 
   @keyframes float {
+
     0%,
     100% {
       transform: translateY(0);
     }
+
     50% {
       transform: translateY(-14px);
     }
   }
+
   @keyframes shimmer {
     from {
       background-position: 200% 0;
     }
+
     to {
       background-position: -200% 0;
     }
   }
+
   @keyframes gradient-pan {
+
     0%,
     100% {
       background-position: 0% 50%;
     }
+
     50% {
       background-position: 100% 50%;
     }
   }
+
   @keyframes pulse-soft {
+
     0%,
     100% {
       opacity: 1;
     }
+
     50% {
       opacity: 0.55;
     }
@@ -95,19 +105,23 @@ h3,
   scrollbar-width: thin;
   scrollbar-color: rgb(148 163 184 / 0.35) transparent;
 }
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background-color: rgb(148 163 184 / 0.3);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background-color: rgb(148 163 184 / 0.5);
   border: 3px solid transparent;
@@ -117,12 +131,15 @@ h3,
 /* ---------- Reusable utilities ---------- */
 
 .glass {
-  background: color-mix(in srgb, white 72%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* NOTE: declare only the standard property — the CSS minifier adds any
+     needed -webkit- prefix itself. Writing both by hand caused the minifier
+     to drop the standard one, which killed the blur in some browsers. */
+  background: rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(16px) saturate(150%);
 }
+
 .dark .glass {
-  background: color-mix(in srgb, #14141f 72%, transparent);
+  background: rgb(20 20 31 / 0.72);
 }
 
 .card-hover {
@@ -130,6 +147,7 @@ h3,
     transform 0.25s ease,
     box-shadow 0.25s ease;
 }
+
 .card-hover:hover {
   transform: translateY(-3px);
 }

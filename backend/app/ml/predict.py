@@ -12,7 +12,12 @@ _model_bundle = None  # loaded once, lazily, then reused — same idea as the Ea
 def _get_model_bundle():
     global _model_bundle
     if _model_bundle is None:
-        _model_bundle = joblib.load(MODEL_PATH)
+        try:
+            _model_bundle = joblib.load(MODEL_PATH)
+        except FileNotFoundError:
+            # No trained model on disk yet (e.g. fresh deploy before the first
+            # retrain). Callers fall back to a simple heuristic instead of 500ing.
+            return None
     return _model_bundle
 
 def predict_next_month_spend(
@@ -23,6 +28,9 @@ def predict_next_month_spend(
     category_name: str,   # changed from category_id
 ) -> float:
     bundle = _get_model_bundle()
+    if bundle is None:
+        # Graceful fallback: 3-month average beats a 500 error.
+        return max(0.0, round(float(spend_avg_3mo), 2))
     model = bundle["model"]
     feature_cols = bundle["feature_cols"]
 
