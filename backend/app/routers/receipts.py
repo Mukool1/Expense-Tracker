@@ -37,6 +37,11 @@ def scan_receipt(file: UploadFile = File(...), current_user: User = Depends(get_
     try:
         with open(temp_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
+        logger.info(
+            "scan started: %s (%.0f KB)",
+            safe_name,
+            os.path.getsize(temp_path) / 1024,
+        )
         # Synchronous: upload -> OCR -> parse, result returned immediately.
         # No Celery worker needed.
         return scan_receipt_image(temp_path)
